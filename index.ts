@@ -61,30 +61,34 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 // Route to download and decrypt file
 app.get('/download/:hash', async (req, res) => {
     try {
-      const { hash } = req.params;
-      const viewKey = req.query.viewKey as string;
-  
-      if (!hash || !viewKey) {
+        const { hash } = req.params;
+        const viewKey = req.query.viewKey as string;
+
+        if (!hash || !viewKey) {
         return res.status(400).json({ error: 'IPFS hash and viewKey are required' });
-      }
-  
-      const ipfsFile = await ipfs.cat(hash);
-      const chunks: Buffer[] = [];
-  
-      for await (const chunk of ipfsFile) {
+        }
+
+        const ipfsFile = await ipfs.cat(hash);
+        const chunks: Buffer[] = [];
+
+        for await (const chunk of ipfsFile) {
         chunks.push(Buffer.from(chunk)); // Convert Uint8Array to Buffer
-      }
-  
-      const encryptedBuffer = Buffer.concat(chunks);
-      const decryptedFile = decryptFile(encryptedBuffer, viewKey);
-  
-      res.setHeader('Content-Disposition', `attachment; filename="decrypted_file"`);
-      res.send(decryptedFile);
+        }
+
+        const encryptedBuffer = Buffer.concat(chunks);
+        const decryptedFile = decryptFile(encryptedBuffer, viewKey);
+
+        res.setHeader('Content-Disposition', `attachment; filename="decrypted_file"`);
+        res.send(decryptedFile);
     } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: 'Failed to download or decrypt file from IPFS' });
+        console.error(error);
+        res.status(500).json({ error: 'Failed to download or decrypt file from IPFS' });
     }
-  });
+});
+
+app.get("/", async (req, res) =>{
+    res.send("Hello Aleo to PQD")
+})
   
 
 app.listen(PORT, () => {
