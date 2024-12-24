@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@envio-dev/hypersync-client": "^0.6.2",
+    "aws-sdk": "^2.1692.0",
     "axios": "^1.4.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -17,6 +18,7 @@
     "hdkey": "^2.1.0",
     "http-status": "^1.7.4",
     "mongoose": "^5.7.11",
+    "multer": "^1.4.5-lts.1",
     "node-fetch": "^3.3.2",
     "nodemon": "^3.1.4",
     "path": "^0.12.7",
