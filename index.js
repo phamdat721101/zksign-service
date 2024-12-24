@@ -35,38 +35,41 @@ app.get('/', async (req, res) => {
 
 // Handle file upload route
 app.post('/upload', upload.single('file'), async (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ error: 'No file uploaded' });
-    }
-
-    const params = {
-        Bucket: process.env.FILEBASE_BUCKET, // Your Filebase bucket name
-        Key: `${Date.now()}-${req.file.originalname}`, // Use a timestamp to prevent overwriting
-        Body: req.file.buffer,
-        ContentType: req.file.mimetype,
-        ACL: 'public-read' // Make the file publicly accessible
-    };
-
     try {
+        // Validate file data and viewkey
+        const { file, viewkey } = req.body;
+        if (!file || !viewkey) {
+            return res.status(400).json({ error: 'File data and viewkey are required' });
+        }
 
-        s3.putObject(params, (err, data) => {
-            if (err) {
-                console.error("Error uploading to Filebase:", err);
-                return res.status(500).json({ error: 'Error uploading file to Filebase' });
-            }
+        // Decode file data (assumes it's base64-encoded in the request)
+        const fileBuffer = Buffer.from(file, 'base64');
 
-            console.log('Headers:', data); // Check headers here
+        // Construct S3 parameters
+        const timestamp = Date.now();
+        const params = {
+            Bucket: process.env.FILEBASE_BUCKET, // Ensure this is set in your environment variables
+            Key: `${timestamp}`, // File key is now just a timestamp
+            Body: fileBuffer,
+            ContentType: req.headers['content-type'] || 'application/octet-stream', // Use client-provided or default MIME type
+            ACL: 'public-read', // Make the file publicly accessible
+            Metadata: {
+                viewkey: viewkey, // Attach the viewkey as metadata
+            },
+        };
 
-            res.json({
-                success: true,
-                fileUrl: `https://s3.filebase.com/${params.Bucket}/${params.Key}`,
-                etag: data.ETag,
-                headers: data.ResponseMetadata // Response metadata
-            });
+        // Upload to S3/Filebase
+        const data = await s3.putObject(params).promise();
+
+        // Respond with the uploaded file's URL and metadata
+        res.json({
+            success: true,
+            fileUrl: `https://s3.filebase.com/${params.Bucket}/${params.Key}`,
+            etag: data.ETag,
         });
     } catch (error) {
-        console.error("Error uploading to Filebase:", error);
-        res.status(500).json({ error: 'Error uploading file to Filebase' });
+        console.error("Error uploading file:", error);
+        res.status(500).json({ error: 'Failed to upload file', details: error.message });
     }
 });
 
