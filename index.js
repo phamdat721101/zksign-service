@@ -4,7 +4,13 @@ const path = require('path');
 const cors = require('cors');
 const multer = require('multer');
 const AWS = require('aws-sdk'); // AWS SDK for Filebase interaction
+const { createClient } = require('@supabase/supabase-js');
 require("dotenv").config();
+
+// Initialize Supabase client
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Set up Filebase configuration (similar to AWS S3)
 const s3 = new AWS.S3({
@@ -20,14 +26,12 @@ const s3 = new AWS.S3({
 const storage = multer.memoryStorage();
 const upload = multer({ storage: multer.memoryStorage() });
 
-
 app.use(express.static('public'))
 app.use(express.json()) // for parsing application/json
 app.use(express.urlencoded({ extended: true }))
 app.use(cors({
     origin: '*'
 }));
-
 
 app.get('/', async (req, res) => {
     res.json("Hello Zk sign Aleo")
@@ -61,24 +65,40 @@ app.post('/upload', upload.single('file'), async (req, res) => {
         // Upload to S3/Filebase
         const data = await s3.putObject(params).promise();
 
-        // Respond with the uploaded file's URL and metadata
+        // Retrieve the CID from the response headers
+        const cid = data.$response.httpResponse.headers['x-amz-meta-cid'];
+
+        // Store the document metadata in Supabase
+        const { data: supabaseData, error } = await supabase
+            .from('documents')
+            .insert([
+                { viewkey: viewkey, cid: cid, signed_status: 0 }
+            ]);
+
+        if (error) {
+            console.log(`Error supabase: ${error.message}`)
+            throw error;
+        }
+
+        // Respond with the uploaded file's URL, CID, and metadata
         res.json({
             success: true,
             fileUrl: `https://s3.filebase.com/${params.Bucket}/${params.Key}`,
+            cid: cid, // Include the CID in the response
             etag: data.ETag,
         });
     } catch (error) {
-        console.error("Error uploading file:", error);
+        console.log(`Error uploading file: ${error}`);
         res.status(500).json({ error: 'Failed to upload file', details: error.message });
     }
 });
 
 // Handle file read from Filebase by CID
 app.get('/file', async (req, res) => {
-    const cid = req.query.cid
+    const cid = req.query.cid;
 
     try {
-        const ipfs_url = "https://scared-blue-planarian.myfilebase.com/ipfs"
+        const ipfs_url = "https://scared-blue-planarian.myfilebase.com/ipfs";
         // Get the file from Filebase using the CID
         const fileUrl = `${ipfs_url}/${cid}`;
         res.redirect(fileUrl); // Redirect the user to the file location on Filebase
@@ -88,7 +108,56 @@ app.get('/file', async (req, res) => {
     }
 });
 
-app.listen(process.env.PORT || 3001, () =>{
+// Add this new route to your existing code
+app.get('/documents', async (req, res) => {
+    const { viewkey } = req.query;
+
+    if (!viewkey) {
+        return res.status(400).json({ error: 'Viewkey is required' });
+    }
+
+    try {
+        // Query Supabase for documents with the given viewkey
+        const { data, error } = await supabase
+            .from('documents')
+            .select('*')
+            .eq('viewkey', viewkey);
+
+        if (error) {
+            throw error;
+        }
+
+        // Return the list of documents
+        res.json({ success: true, documents: data });
+    } catch (error) {
+        console.error("Error fetching documents:", error);
+        res.status(500).json({ error: 'Failed to fetch documents', details: error.message });
+    }
+});
+
+// Handle document signing
+app.post('/sign', async (req, res) => {
+    const { cid } = req.body;
+
+    try {
+        // Update the signed status in Supabase
+        const { data, error } = await supabase
+            .from('documents')
+            .update({ signed_status: 1 })
+            .eq('cid', cid);
+
+        if (error) {
+            throw error;
+        }
+
+        res.json({ success: true, message: 'Document signed successfully' });
+    } catch (error) {
+        console.error("Error signing document:", error);
+        res.status(500).json({ error: 'Failed to sign document', details: error.message });
+    }
+});
+
+app.listen(process.env.PORT || 3001, () => {
     console.log("Listening at 3001")
 });
 
